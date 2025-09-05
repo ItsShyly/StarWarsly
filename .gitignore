@@ -8,4 +8,4 @@ node_modules/
 dist/
 
 # Storage data
-Storage/
+storage/
