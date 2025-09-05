@@ -189,7 +189,7 @@ async function acquireToken(): Promise<void> {
 // >>> Command registry for all bot commands
 const commands: Record<string, BotCommand> = {};
 
-// ^^^ RECURSIVE COMMAND LOADING ^^^
+// vvv RECURSIVE COMMAND LOADING vvv
 // >>> Load all commands from /commands folder and subdirectories
 async function loadCommandFiles(): Promise<void> {
     const commandsPath = path.join(__dirname, 'commands');

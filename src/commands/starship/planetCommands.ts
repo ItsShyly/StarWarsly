@@ -13,7 +13,7 @@ import { GlobalInteractiveHandler } from "../../utils/globalInteractiveHandler.j
 
 // vvv Planet Interaction Commands vvv
 export class PlanetCommands {
-  // ^^^ Landing Sequence Handler ^^^
+  // vvv Landing Sequence Handler vvv
   static async landOnPlanet(ship: Starship, reply: (msg: string) => void): Promise<void> {
     // vvv Pre-Landing Validation vvv
     // >>> Ensure ship is ready to land
@@ -42,7 +42,7 @@ export class PlanetCommands {
     reply(`${event.emoji} ${event.text}`);
   }
 
-  // ^^^ Planetary Exploration System ^^^
+  // vvv Planetary Exploration System vvv
   static async explore(ship: Starship, args: string[], reply: (msg: string) => void, userId?: string, channelId?: string, bot?: any): Promise<void> {
     // vvv Exploration Prerequisites vvv
     // >>> Validate exploration conditions
@@ -127,7 +127,7 @@ export class PlanetCommands {
       reply(`\n${event.emoji} ${event.text}`);
     }
   }
-  // ^^^ Exploration Help Display ^^^
+  // vvv Exploration Help Display vvv
   // >>> Show exploration help and tier information
   static async showExplorationHelp(reply: (msg: string) => void): Promise<void> {
     const helpMessage = `

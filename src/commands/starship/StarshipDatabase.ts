@@ -17,7 +17,7 @@ export class StarshipDatabase {
     console.log("🚀 StarshipDatabase initialized with centralized system");
   }
 
-  // ^^^ Ship Data Retrieval ^^^
+  // vvv Ship Data Retrieval vvv
   async get(user: string): Promise<Starship | null> {
     // >>> Get starship data from centralized database
     const starship = await this.globalDb.getStarship(user);
@@ -33,7 +33,7 @@ export class StarshipDatabase {
     return starship;
   }
 
-  // ^^^ Ship Data Persistence ^^^
+  // vvv Ship Data Persistence vvv
   async save(user: string, ship: Starship): Promise<void> {
     // >>> Handle credit changes
     const currentCredits = await this.globalDb.getPlayerCredits(user);
@@ -48,13 +48,13 @@ export class StarshipDatabase {
     await this.globalDb.saveStarship(user, ship);
   }
 
-  // ^^^ Ship Removal Handler ^^^
+  // vvv Ship Removal Handler vvv
   async delete(user: string): Promise<void> {
     // >>> Remove starship data but keep player data
     await this.globalDb.deleteStarship(user);
   }
 
-  // ^^^ Active Flight Tracker ^^^
+  // vvv Active Flight Tracker vvv
   async getAllInFlight(): Promise<{ user: string; inFlight: Starship["inFlight"] }[]> {
     // >>> Get all ships currently in flight
     const results = await this.globalDb.getStarshipsInFlight();
@@ -66,7 +66,7 @@ export class StarshipDatabase {
     }));
   }
 
-  // ^^^ Ranking System Query ^^^
+  // vvv Ranking System Query vvv
   async getLeaderboard(limit: number = 10): Promise<{ user: string; name: string; distance: number; location: string }[]> {
     // >>> Get leaderboard from centralized database
     const results = await this.globalDb.getStarshipLeaderboard(limit);
@@ -80,13 +80,13 @@ export class StarshipDatabase {
     }));
   }
 
-  // ^^^ Database Connection Cleanup ^^^
+  // vvv Database Connection Cleanup vvv
   close() {
     // >>> Database connection managed by GlobalDatabase singleton
     console.log("StarshipDatabase: Connection managed by GlobalDatabase");
   }
 
-  // ^^^ Additional Utilities ^^^
+  // vvv Additional Utilities vvv
   
   // >>> Get player credits (convenience method)
   async getPlayerCredits(user: string): Promise<number> {

@@ -12,7 +12,7 @@ export class DatabaseUtils {
     this.globalDb = GlobalDatabase.getInstance();
   }
 
-  // ^^^ Database Inspection Tools ^^^
+  // vvv Database Inspection Tools vvv
   
   // >>> List all players
   async listAllPlayers(): Promise<void> {
@@ -75,7 +75,7 @@ export class DatabaseUtils {
     console.log(`   💰 Total Credits: ${totalCredits}`);
   }
 
-  // ^^^ Testing Tools ^^^
+  // vvv Testing Tools vvv
   
   // >>> Create test player
   async createTestPlayer(username: string = "testuser"): Promise<void> {
@@ -109,7 +109,7 @@ export class DatabaseUtils {
     console.log(`✅ Created test starship for: ${username}`);
   }
 
-  // ^^^ Cleanup Tools ^^^
+  // vvv Cleanup Tools vvv
   
   // >>> Clear all data (use with caution!)
   async clearAllData(): Promise<void> {
@@ -153,7 +153,7 @@ export class DatabaseUtils {
     console.log("🧹 Test data cleared!");
   }
 
-  // ^^^ Validation Tools ^^^
+  // vvv Validation Tools vvv
   
   // >>> Check data integrity
   async validateDataIntegrity(): Promise<void> {
@@ -200,7 +200,7 @@ export class DatabaseUtils {
     console.log("✅ Data integrity check complete!");
   }
 
-  // ^^^ Export/Import Tools ^^^
+  // vvv Export/Import Tools vvv
   
   // >>> Export all data to JSON (for backup)
   async exportToJSON(): Promise<any> {

@@ -15,7 +15,7 @@ let intervalStarted = false;
 // >>> Singleton database instance
 const globalDB = GlobalDatabase.getInstance();
 
-// ^^^ Background Service Initialization ^^^
+// vvv Background Service Initialization vvv
 export function initializeBackgroundChecker(bot: any) {
   // vvv Bot Instance Management vvv
   // >>> Store bot reference for global access
@@ -35,7 +35,7 @@ export function initializeBackgroundChecker(bot: any) {
   }
 }
 
-// ^^^ Automated Flight Completion Checker ^^^
+// vvv Automated Flight Completion Checker vvv
 async function backgroundFlightChecker() {
   try {
     // vvv Event Maintenance vvv
