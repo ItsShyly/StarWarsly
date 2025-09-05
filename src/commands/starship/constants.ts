@@ -4,7 +4,9 @@
 // >>> Defines economic values, probabilities, and gameplay mechanics.
 // >>> Central configuration for the entire starship adventure system.
 
-import type { CargoType, GameEvent, TieredExplorationEvent, InteractiveEvent } from "./types.js";
+import strike from "@commands/interactives/strike.js";
+import type { CargoType, GameEvent, TieredExplorationEvent, InteractiveEvent, InteractiveEventResult } from "./types.js";
+
 
 // vvv Physical Constants vvv
 export const LIGHT_YEAR_TO_KM = 9.461e12;
@@ -18,6 +20,54 @@ export const INVESTMENT_TIERS = {
   TIER_3: { min: 501, max: 1500 },   // <<< High risk, high reward
   TIER_4: { min: 1501, max: Infinity } // <<< Extreme risk, extreme reward
 } as const;
+
+// vvv Interactives vvv
+// >>> Command Types
+export const INTERACTIVE_CHANCE = {
+  SAFE: 'safe',        // <<< higher success rate (lower rewards)
+  NEUTRAL: 'neutral',   // <<< moderate success rate (balanced rewards)
+  RISKY: 'risky',      // <<< lower success rate but (potentially higher rewards)
+} as const;
+
+// >>> Interactive Chance Mapping
+export const INTERACTIVE_CHANCE_MAPPING: Record<string, string> = {
+  shelter: INTERACTIVE_CHANCE.SAFE,
+  run: INTERACTIVE_CHANCE.SAFE,
+  hide: INTERACTIVE_CHANCE.SAFE,
+  pay: INTERACTIVE_CHANCE.RISKY,
+  fight: INTERACTIVE_CHANCE.RISKY,
+  peace: INTERACTIVE_CHANCE.SAFE,
+  buy: INTERACTIVE_CHANCE.RISKY,
+  inspect: INTERACTIVE_CHANCE.SAFE,
+  sneak: INTERACTIVE_CHANCE.RISKY,
+  retreat: INTERACTIVE_CHANCE.SAFE,
+  defend: INTERACTIVE_CHANCE.SAFE,
+  strike: INTERACTIVE_CHANCE.RISKY,
+  secure: INTERACTIVE_CHANCE.SAFE,
+  boost: INTERACTIVE_CHANCE.RISKY,
+  accept: INTERACTIVE_CHANCE.RISKY,
+  decline: INTERACTIVE_CHANCE.SAFE,
+};
+
+// >>> Interactive Success Rates
+export const INTERACTIVE_SUCCESS_RATES = {
+  [INTERACTIVE_CHANCE.SAFE]: 0.8,     // <<< 80% success rate
+  [INTERACTIVE_CHANCE.RISKY]: 0.4,    // <<< 40% success rate
+  [INTERACTIVE_CHANCE.NEUTRAL]: 0.6   // <<< 60% success rate
+} as const;
+
+// >>> Interactive Helper Function
+// >>> Determine the type of a command (good/risky/neutral)
+export function getCommandType(command: string): string {
+  return INTERACTIVE_CHANCE_MAPPING[command] || INTERACTIVE_CHANCE.NEUTRAL;
+}
+
+// >>> Command Success Rates
+// >>> Get the success rate for a specific command
+export function getSuccessRate(command: string): number {
+  const chanceType = getCommandType(command);
+  return INTERACTIVE_SUCCESS_RATES[chanceType as keyof typeof INTERACTIVE_SUCCESS_RATES] || INTERACTIVE_SUCCESS_RATES[INTERACTIVE_CHANCE.NEUTRAL];
+}
 
 // vvv Cargo System vvv
 // >>> All tradeable items and functional equipment
@@ -74,7 +124,7 @@ export const CARGO_TYPES: Record<string, CargoType> = {
     value: 2000, 
     functional: { type: 'credit_generator', effect: 25 } // <<< 25 credits per hour
   },
-  "Hyperantrieb-Booster": { 
+  "Hyperantrieb-Booster": {  
     weight: 40, 
     value: 2500, 
     functional: { type: 'speed_booster', effect: 200 } // <<< +200 ly/h permanent
@@ -700,268 +750,381 @@ export const TIERED_EXPLORATION_EVENTS: TieredExplorationEvent[] = [
   }
 ];
 
+// vvv Interactive Event Scaling Configuration vvv
+// >>> Defines how interactive events scale with investment amount
+export const INTERACTIVE_SCALING = {
+  // >>> Base scaling factors for different outcomes
+  SUCCESS_MULTIPLIER: 0.4,    // <<< average of 40% of investment on success
+  FAILURE_MULTIPLIER: 0.6,    // <<< average of 60% of investment on failure
+  TIMEOUT_MULTIPLIER: 0.8,    // <<< average of 80% of investment on timeout
+
+  // >>> Rare event chances (very low probability)
+  RARE_SUCCESS_CHANCE: 0.05,  // <<< average of 5% chance for big win
+  RARE_FAILURE_CHANCE: 0.03,  // <<< average of 3% chance for big loss
+  RARE_SUCCESS_MULTIPLIER: 2.5, // <<< average of 250% of investment on rare success
+  RARE_FAILURE_MULTIPLIER: 1.5, // <<< average of 150% of investment on rare failure
+
+  // >>> Randomness variation range
+  RANDOM_VARIATION: 0.4,       // <<< ±20% variation (0.8 to 1.2 multiplier)
+} as const;
+
+// vvv Interactive Event Scaling Function vvv
+// >>> Utility function to scale interactive event results based on investment and tier
+export function scaleInteractiveEventResult(
+  baseResult: InteractiveEventResult, 
+  investmentAmount: number, 
+  tier: number,
+  eventType: 'SUCCESS' | 'FAILURE' | 'TIMEOUT' = 'SUCCESS',
+  isRareEvent: boolean = false
+): InteractiveEventResult {
+  const scaling = INTERACTIVE_SCALING;
+  
+  // >>> Determine credit multiplier based on event type and rarity
+  let creditMultiplier = 0;
+  switch(eventType) {
+    case 'SUCCESS':
+      creditMultiplier = isRareEvent ? scaling.RARE_SUCCESS_MULTIPLIER : scaling.SUCCESS_MULTIPLIER;
+      break;
+    case 'FAILURE':
+      creditMultiplier = isRareEvent ? -scaling.RARE_FAILURE_MULTIPLIER : -scaling.FAILURE_MULTIPLIER;
+      break;
+    case 'TIMEOUT':
+      creditMultiplier = -scaling.TIMEOUT_MULTIPLIER;
+      break;
+  }
+  
+  // >>> Add randomness: ±20% variation  
+  const randomVariation = scaling.RANDOM_VARIATION;
+  const randomFactor = (1 - randomVariation/2) + (Math.random() * randomVariation); // 0.8 to 1.2
+  const scaledCredits = Math.floor(investmentAmount * creditMultiplier * randomFactor);
+  
+  // >>> Create scaled result with all original properties preserved
+  const scaledResult: InteractiveEventResult = {
+    ...baseResult,
+    credits: scaledCredits + (baseResult.credits || 0), // scale credits
+    damage: baseResult.damage || 0,     // Keep original damage
+    fuel: baseResult.fuel || 0,         // Keep original fuel
+    addCargo: baseResult.addCargo,
+    removeCargo: baseResult.removeCargo 
+  };
+  
+  // >>> Log scaling for debugging
+  console.log(`💰 Interactive Event Scaling: Investment=${investmentAmount}, Type=${eventType}, Rare=${isRareEvent}`);
+  console.log(`   Multiplier=${creditMultiplier}, Random=${randomFactor.toFixed(2)}, Final Credits=${scaledResult.credits}`);
+  
+  return scaledResult;
+}
+
+// vvv Investment Tier Helper Function vvv
+// >>> Determine which investment tier an amount falls into
+export function getInvestmentTier(amount: number): number {
+  if (amount >= INVESTMENT_TIERS.TIER_4.min) return 4;
+  if (amount >= INVESTMENT_TIERS.TIER_3.min) return 3;
+  if (amount >= INVESTMENT_TIERS.TIER_2.min) return 2;
+  return 1;
+}
+
+// vvv Rare Event Chance Calculator vvv
+// >>> Determine if a rare event should occur based on random chance
+export function shouldTriggerRareEvent(eventType: 'SUCCESS' | 'FAILURE'): boolean {
+  const random = Math.random();
+  const chance = eventType === 'SUCCESS' ? 
+    INTERACTIVE_SCALING.RARE_SUCCESS_CHANCE : 
+    INTERACTIVE_SCALING.RARE_FAILURE_CHANCE;
+  return random < chance;
+}
+
 // vvv Interactive Events vvv
 // >>> Time-limited events requiring player response
+// >>> NOTE: Credit values in these events are BASE values that get scaled with randomness
+// >>> Credits scale: Success +40%, Failure -60%, Timeout -80% of investment
+// >>> Rare events (5% success, 3% failure): Success +250%, Failure -150%
 export const INTERACTIVE_EVENTS: InteractiveEvent[] = [
   {
     id: "sandstorm_escape",
     emoji: "🌪️",
-    text: "Ein gewaltiger Sandsturm nähert sich! Du siehst eine Höhle in der Ferne. Schreibe schnell `#shelter` um dich zu verstecken! (Du hast T-minus 20 Standardsekunden und 0,9234 Millisekunden.",
-    timeLimit: 20, // <<< seconds
+    text: "SANDSTURM-ALARM! Ionische Sandwolke nähert sich mit 500 km/h. Nächstgelegener Schutz: Canyon in Reichweite. Eingabe #shelter erforderlich in T-30 Sekunden!",
+    timeLimit: 30,
     successCommand: "shelter",
     successResult: {
-      text: "Du erreichst die Höhle rechtzeitig und wartest den Sturm ab. Kein Schaden!",
+      text: "Notmanöver erfolgreich! Canyon bietet Schutz. Sturm hinterlässt verwertbare Kristallfragmente an der Außenhülle.",
       emoji: "🏠",
       damage: 0,
       credits: 0
     },
     failureResult: {
-      text: "Der Sandsturm erwischt dich! Sand dringt in alle Systeme ein.",
+      text: "Zu spät! Sandsturm erfasst das Schiff. Quartzsand dringt in Antriebssysteme ein - erheblicher Schaden!",
       emoji: "💥",
-      damage: 15,
-      credits: -80
+      damage: 20,
+      credits: 0
+    },
+    timeoutResult: {
+      text: "KEINE REAKTION ERKANNT! Sandsturm verursacht strukturellen Schaden an Hülle und Sensoren.",
+      emoji: "⏰",
+      damage: 29,
+      credits: 0
     }
   },
   {
     id: "bounty_hunter_trap",
     emoji: "🎯",
-    text: "Du wurdest in eine Falle gelockt, aber erkennst es noch schnell genug! Schreibe schnell `#run` in den Chat, du hast 15 Sekunden Zeit bevor dir deine Credits gestohlen werden!",
-    timeLimit: 15,
+    text: "AKTIVE VERFOLGUNG! Frequenzmuster identifiziert Kopfgeldjäger-Schiff vom Typ Firespray. Eingabe #run für Notstart in T-25 Sekunden!",
+    timeLimit: 25,
     successCommand: "run",
     successResult: {
-      text: "Du springst in dein Schiff und entkommst den Kopfgeldjägern knapp!",
+      text: "Triebwerkszündung im letzten Moment - Entkommen erfolgreich! Fluchtmanöver liefert wertvolle Scannerdaten.",
       emoji: "🚀",
       damage: 0,
       credits: 0
     },
     failureResult: {
-      text: "Die Kopfgeldjäger haben dich erwischt und rauben dich aus!",
+      text: "Einkreisung komplett! Kopfgeldjäger erzwingen Energiekredit-Transfer für Freigabe.",
       emoji: "💸",
-      damage: 5,
-      credits: -200
+      damage: 0, 
+      credits: 0
+    },
+    timeoutResult: {
+      text: "ALARM: Enterdroiden detektiert! Piraten plündern Frachtraum und beschädigen Systeme.",
+      emoji: "⏰",
+      damage: 20, 
+      credits: 0
     }
   },
   {
     id: "imperial_patrol",
     emoji: "⚔️",
-    text: "Imperiale Sturmtruppen nähern sich! Du kannst dich verstecken oder bestehen. Schreibe `#hide` oder `#bribe` - 12 Sekunden bis sie dich entdecken!",
-    timeLimit: 12,
-    successCommand: ["hide", "bribe"],
+    text: "IMPERIALE KONTROLLE! TIE-Jäger nähern sich zur Inspektion. Eingabe #hide für Asteroidenmanöver oder #pay für 'administrative Gebühr' in T-25 Sekunden!",
+    timeLimit: 25,
+    successCommand: ["hide", "pay"],
     successResult: {
       hide: {
-        text: "Du versteckst dich geschickt zwischen den Felsen. Die Patrouille zieht vorbei.",
+        text: "Asteroidenfeld bietet perfekte Tarnung. Nebenbei seltene Mineralien entdeckt!",
         emoji: "👤",
         damage: 0,
         credits: 0
       },
-      bribe: {
-        text: "Ein kleines Bestechungsgeld und die Sturmtruppen schauen weg.",
+      pay: {
+        text: "Credits akzeptiert. Imperialer Kommandant gibt 'freiwillig' Handelsrouten-Informationen preis.",
         emoji: "💰",
         damage: 0,
-        credits: -50
+        credits: -25
       }
     },
     failureResult: {
-      text: "Die Imperialen haben dich entdeckt! Ein kurzer Feuerkampf beschädigt dein Schiff.",
+      text: "Durchsuchung abgeschlossen. 'Nicht konforme Fracht' festgestellt - Beschlagnahmung und Strafe!",
       emoji: "💥",
+      damage: 0,
+      credits: 0
+    },
+    timeoutResult: {
+      text: "KEINE KOMMUNIKATION ERKANNT! Imperialer Warnschuss trifft Schildgenerator.",
+      emoji: "⏰",
       damage: 20,
-      credits: -100
+      credits: 0
     }
   },
   {
     id: "cantina_fight",
     emoji: "🍺",
-    text: "In der örtlichen Cantina provoziert dich ein Alien! Schreibe `#fight` um zu kämpfen oder `#peace` um zu verhandeln. 30 Sekunden bis die Situation eskaliert!",
+    text: "CANTINA-VORFALL! Betrunkenes Rodian provoziert Konfrontation. Eingabe #fight für Kampf oder #peace für Deeskalation in T-30 Sekunden!",
     timeLimit: 30,
     successCommand: ["fight", "peace"],
     successResult: {
       fight: {
-        text: "Du gewinnst den Faustkampf! Die anderen Gäste sind beeindruckt und spendieren dir Drinks.",
+        text: "Kampf gewonnen! Cantina-Gäste respektieren Stärke und teilen wertvolle Handelsinformationen.",
         emoji: "👊",
-        damage: 5,
-        credits: 75
+        damage: 0,
+        credits: 0
       },
       peace: {
-        text: "Deine Diplomatie zahlt sich aus. Der Alien entschuldigt sich und kauft dir einen Drink.",
+        text: "Diplomatische Lösung erfolgreich. Rodian entschuldigt sich und bietet Wiedergutmachung an.",
         emoji: "🤝",
         damage: 0,
-        credits: 25
+        credits: 0
       }
     },
     failureResult: {
-      text: "Die ganze Cantina bricht in eine Schlägerei aus! Du flüchtest mit Schrammen und leeren Taschen.",
+      text: "Situation eskaliert! Cantina-Schlägerei beschädigt Schiffssysteme während du abgelenkt bist.",
       emoji: "💔",
-      damage: 12,
-      credits: -120
+      damage: 9, 
+      credits: 0
+    },
+    timeoutResult: {
+      text: "KEINE ENTSCHEIDUNG GETROFFEN! Rodian und seine Crew greifen an und verursachen Schäden.",
+      emoji: "⏰",
+      damage: 0,
+      credits: 0
     }
   },
   {
     id: "jawa_traders",
     emoji: "👥",
-    text: "Jawas bieten dir Ersatzteile an, aber sie sprechen schnell und gestikulieren wild! Schreibe `#buy` um zu kaufen oder `#inspect` um die Teile zu prüfen. 45 Sekunden!",
-    timeLimit: 45,
+    text: "JAWA-HÄNDLER! Utinni! Bieten 'erstklassige' Ersatzteile an. Eingabe #buy für Kauf oder #inspect für Überprüfung in T-35 Sekunden!",
+    timeLimit: 35,
     successCommand: ["buy", "inspect"],
     successResult: {
       buy: {
-        text: "Du kaufst impulsiv - es sind tatsächlich qualitativ gute Teile! Dein Schiff ist etwas repariert.",
+        text: "Kauf erfolgreich! Überraschenderweise sind Teile von guter Qualität und reparieren leichte Schäden.",
         emoji: "🛠️",
         damage: -10,
-        credits: -60
+        credits: 0
       },
       inspect: {
-        text: "Deine Vorsicht zahlt sich aus - du findest defekte Teile und verhandelst den Preis runter!",
+        text: "Vorsicht zahlt sich aus! Defekte Teile entdeckt - Jawas geben Rabatt für ehrliche Teile.",
         emoji: "🔍",
         damage: -5,
-        credits: -30
+        credits: 0
       }
     },
     failureResult: {
-      text: "Du zögerst zu lange und die Jawas denken, du willst sie betrügen! Sie fahren weg und andere Jawas meiden dich.",
+      text: "Jawas fühlen sich betrogen! Sie sabotieren leichtes System als Rache bevor sie verschwinden.",
       emoji: "😤",
       damage: 0,
+      credits: 0
+    },
+    timeoutResult: {
+      text: "ZAUDERN KOSTET! Jawas verlieren Interesse und nehmen ein paar lose Teile beim Gehen mit.",
+      emoji: "⏰",
+      damage: 5,
       credits: 0
     }
   },
   {
     id: "krayt_dragon_den",
     emoji: "🐉",
-    text: "Du stößt auf eine Krayt-Drachen-Höhle mit wertvollen Perlen! Aber das Biest bewegt sich. Schreibe `#sneak` um zu schleichen oder `#retreat` um zu fliehen! 20 Sekunden!",
-    timeLimit: 20,
+    text: "KRAYT-DRACHEN-HÖHLE! Lebenszeichen detektiert aber wertvolle Perlen sichtbar. Eingabe #sneak für Schleichen oder #retreat für Rückzug in T-25 Sekunden!",
+    timeLimit: 25,
     successCommand: ["sneak", "retreat"],
     successResult: {
       sneak: {
-        text: "Du schleichst erfolgreich vorbei und sammelst einige Krayt-Drachen-Perlen!",
+        text: "Schleichmanöver erfolgreich! Einige Krayt-Drachen-Perlen geborgen ohne den Drachen zu wecken.",
         emoji: "💎",
         damage: 0,
-        credits: 180,
+        credits: 0,
         addCargo: { item: "Antike Artefakte", quantity: 1 }
       },
       retreat: {
-        text: "Du ziehst dich vorsichtig zurück. Besser so - der Drache war wach!",
+        text: "Rückzug klug gewählt! Sensoren zeigen, dass der Drache vollständig erwacht ist - Gefahr gebannt.",
         emoji: "🚶",
         damage: 0,
         credits: 0
       }
     },
     failureResult: {
-      text: "Der Krayt-Drache bemerkt dich! Du fliehst hastig, aber dein Schiff wird beim Start beschädigt.",
+      text: "Drache bemerkt Eindringling! Hastiger Rückzug verursacht Hüllenschaden.",
       emoji: "🐲",
-      damage: 25,
-      credits: -50
+      damage: 9,
+      credits: 0
+    },
+    timeoutResult: {
+      text: "ZU LANGSAM! Krayt-Drache erwacht vollständig und greift mit verheerender Wucht an!",
+      emoji: "⏰",
+      damage: 27,
+      credits: 0
     }
   },
   {
     id: "space_pirate_ambush",
     emoji: "🏴‍☠️",
-    text: "Weltraumpiraten greifen an! Deine Schilde sind schwach. Schreibe `#shields` um Energie umzuleiten oder `#weapons` um zurückzuschießen! 30 Sekunden!",
+    text: "PIRATEN-ÜBERFALL! Bewaffnete Schiffe aus dem Hyperraum aufgetaucht. Eingabe #defend für Schilde oder #strike für Gegenangriff in T-30 Sekunden!",
     timeLimit: 30,
-    successCommand: ["shields", "weapons"],
+    successCommand: ["defend", "strike"],
     successResult: {
-      shields: {
-        text: "Deine verstärkten Schilde halten stand! Die Piraten geben auf und fliehen.",
+      defend: {
+        text: "Schildverstärkung hält Stand! Piraten ziehen sich nach erfolglosem Angriff zurück.",
         emoji: "🛡️",
         damage: 5,
         credits: 0
       },
-      weapons: {
-        text: "Dein Gegenangriff trifft! Die Piraten explodieren und hinterlassen Wrackteile.",
+      strike: {
+        text: "Gezielter Angriff trifft Reaktor! Piratenschiff explodiert und hinterlässt verwertbares Wrackmaterial.",
         emoji: "💥",
         damage: 8,
-        credits: 90,
+        credits: 0,
         addCargo: { item: "Raumschiff-Bauteile", quantity: 1 }
       }
     },
     failureResult: {
-      text: "Die Piraten durchbrechen deine Verteidigung! Sie beschädigen dein Schiff und stehlen Credits.",
+      text: "Piraten durchbrechen Verteidigung! Enterdroiden plündern Fracht bevor du sie abschüttelst.",
       emoji: "☠️",
-      damage: 30,
-      credits: -150
+      damage: 10,
+      credits: 0
+    },
+    timeoutResult: {
+      text: "UNENTSCHLOSSENHEIT BESTRAFT! Piraten nutzen Verzögerung für koordinierten Angriff auf ungeschützte Systeme.",
+      emoji: "⏰",
+      damage: 21,
+      credits: 0
     }
   },
   {
     id: "toxic_gas_leak",
     emoji: "☠️",
-    text: "Giftgas strömt aus einer beschädigten Anlage! Schreibe `#mask` um deine Atemmaske aufzusetzen oder `#run` um zu rennen! 60 Sekunden!",
-    timeLimit: 60,
-    successCommand: ["mask", "run"],
+    text: "GIFTGAS-ALARM! Toxisches Leck auf Station kontaminiert Lebenserhaltung. Eingabe #secure für Lukenversiegelung oder #boost für Triebwerksreinigung in T-40 Sekunden!",
+    timeLimit: 40,
+    successCommand: ["secure", "boost"],
     successResult: {
-      mask: {
-        text: "Deine Atemmaske rettet dich! Du kannst sogar wertvolle Chemikalien aus der Anlage bergen.",
-        emoji: "😷",
+      secure: {
+        text: "Luken erfolgreich versiegelt! Giftgas blockiert. Bei der Sicherung wertvolle Chemikalien geborgen.",
+        emoji: "🚪",
         damage: 0,
-        credits: 120,
+        credits: 0,
         addCargo: { item: "Medizinische Vorräte", quantity: 1 }
       },
-      run: {
-        text: "Du rennst schnell genug weg! Nur ein wenig benommen, aber unverletzt.",
-        emoji: "🏃",
+      boost: {
+        text: "Triebwerksstrahl-Manöver erfolgreich! Gas weggeblasen mit minimalem Hüllenschaden.",
+        emoji: "🌀",
         damage: 3,
         credits: 0
       }
     },
     failureResult: {
-      text: "Das Giftgas erwischt dich! Du erleidest Vergiftungssymptome und musst teure Medizin kaufen.",
+      text: "Giftgas dringt ein! Teure Dekontaminationsmaßnahmen erforderlich.",
       emoji: "🤢",
-      damage: 15,
-      credits: -100
+      damage: 3,
+      credits: 0
+    },
+    timeoutResult: {
+      text: "ENTSCHEIDUNGSDILEMMA! Gas kontaminiert kritische Systeme - umfangreiche Reparaturen nötig.",
+      emoji: "⏰",
+      damage: 12,
+      credits: 0
     }
   },
   {
     id: "rebel_spy_contact",
     emoji: "🕵️",
-    text: "Ein Rebellenspion kontaktiert dich per Funk! Er bietet dir einen riskanten Auftrag. Schreibe `#accept` oder `#decline` - T-50 Standardsekunden bis die Verbindung abbricht!",
-    timeLimit: 50,
+    text: "VERSCHLÜSSELTES REBELLENSIGNAL! Riskanter Kurierauftrag angeboten. Eingabe #accept für Annahme oder #decline für Ablehnung in T-35 Sekunden!",
+    timeLimit: 35,
     successCommand: ["accept", "decline"],
     successResult: {
       accept: {
-        text: "Du nimmst den Auftrag an! Der Spion überweist dir Credits und gibt dir verschlüsselte Daten.",
+        text: "Auftrag angenommen! Spion überweist Vorschuss und überträgt verschlüsselte Daten.",
         emoji: "📊",
         damage: 0,
-        credits: 200,
+        credits: 0,
         addCargo: { item: "Rebellische Propaganda", quantity: 2 }
       },
       decline: {
-        text: "Du lehnst höflich ab. Der Spion respektiert deine Entscheidung und gibt dir einen kleinen Tipp.",
+        text: "Auftrag abgelehnt. Spion respektiert Entscheidung und sendet kleinen Finderlohn für Diskretion.",
         emoji: "🤝",
         damage: 0,
-        credits: 50
+        credits: 0
       }
     },
     failureResult: {
-      text: "Die Übertragung wird von Imperialen abgefangen! Du wirst als Rebellensympathisant markiert.",
+      text: "Antwort nicht eindeutig! Spion bricht Verbindung aus Sicherheitsgründen ab.",
       emoji: "📡",
       damage: 0,
-      credits: -80
+      credits: 0
+    },
+    timeoutResult: {
+      text: "ZEIT ABGELAUFEN! Übertragung bricht ab. Kurz darauf erscheinen imperiale Schiffe zum Scan.",
+      emoji: "⏰",
+      damage: 0,
+      credits: 0
     }
   },
-  {
-    id: "rancor_pit_fall",
-    emoji: "🕳️",
-    text: "Du fällst in eine Rancor-Grube! Das Monster schläft noch. Schreibe `#climb` um herauszuklettern oder `#hide` um dich zu verstecken! 30 Sekunden bis es aufwacht!",
-    timeLimit: 30,
-    successCommand: ["climb", "hide"],
-    successResult: {
-      climb: {
-        text: "Du kletterst geschickt heraus! Dabei findest du sogar einige Knochen mit wertvollen Gegenständen.",
-        emoji: "🧗",
-        damage: 5,
-        credits: 70
-      },
-      hide: {
-        text: "Du versteckst dich erfolgreich! Als der Rancor weggeht, findest du einen geheimen Tunnel.",
-        emoji: "🫥",
-        damage: 0,
-        credits: 40
-      }
-    },
-    failureResult: {
-      text: "Der Rancor wacht auf! Du entkommst knapp, aber nicht ohne Verletzungen und verlorene Ausrüstung.",
-      emoji: "👹",
-      damage: 20,
-      credits: -60,
-      removeCargo: true
-    }
-  }
 ];
 
 export const EXPLORATION_EVENTS: GameEvent[] = TIERED_EXPLORATION_EVENTS.map(event => ({

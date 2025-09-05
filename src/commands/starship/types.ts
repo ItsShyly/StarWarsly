@@ -19,7 +19,7 @@ export interface Starship {
   fuel: number;
   credits: number;
   damage: number;
-  cargo: { item: string; quantity: number }[];
+  cargo: { item: string; quantity: number; value?: number }[];
   location: string;
   distance: number;
   lastFlightDate?: string;
@@ -76,7 +76,8 @@ export interface InteractiveEventResult {
   damage?: number;
   fuel?: number;
   credits?: number;
-  addCargo?: { item: string; quantity: number };
+  health?: number; // <<< New health property
+  addCargo?: { item: string; quantity: number; value?: number };
   removeCargo?: boolean;
 }
 
@@ -89,6 +90,7 @@ export interface InteractiveEvent {
   successCommand: string | string[];
   successResult: InteractiveEventResult | Record<string, InteractiveEventResult>;
   failureResult: InteractiveEventResult;
+  timeoutResult?: InteractiveEventResult;
 }
 
 // >>> Tracking structure for pending interactive events
@@ -98,6 +100,8 @@ export interface PendingInteractiveEvent {
   channelId: string;
   startTime: number;
   messageId?: string;
+  timeoutCallback?: () => void;
+  investmentAmount?: number;  // <<< Track the investment amount for scaling
 }
 
 // >>> Cargo type definition with optional functional properties

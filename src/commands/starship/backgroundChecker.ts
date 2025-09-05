@@ -1,16 +1,19 @@
-// ^^^ Starship Background Checker - Automated Flight Management ^^^
+// ^^^ Starship Background Checker ^^^
 
 // >>> Monitors active flights and notifies players upon arrival at destinations.
 // >>> Manages interactive event cleanup and maintains game state consistency.
-// >>> Runs periodic checks to ensure timely flight completion notifications.
+// >>> Now uses the centralized GlobalDatabase system.
 
-import { StarshipDatabase } from "./StarshipDatabase.js";
-import { InteractiveEventManager } from "./interactiveEvents.js";
+import { GlobalDatabase } from "../../database/GlobalDatabase.js";
+import { InteractiveEventManager } from "../../utils/interactiveEvents.js";
 
 // vvv Global Bot Reference vvv
 // >>> Stored reference to bot instance for background operations
 let globalBot: any = null;
 let intervalStarted = false;
+
+// >>> Singleton database instance
+const globalDB = GlobalDatabase.getInstance();
 
 // ^^^ Background Service Initialization ^^^
 export function initializeBackgroundChecker(bot: any) {
@@ -40,17 +43,16 @@ async function backgroundFlightChecker() {
     InteractiveEventManager.cleanupExpiredEvents();
     
     // vvv Database Query vvv
-    // >>> Fetch all currently traveling ships
-    const starshipDB = new StarshipDatabase();
-    const inFlightShips = await starshipDB.getAllInFlight();
+    // >>> Fetch all currently traveling ships from centralized database
+    const inFlightShips = await globalDB.getStarshipsInFlight();
     const now = Date.now();
 
     // vvv Flight Arrival Processing vvv
     // >>> Check each ship for arrival time
-    for (const { user, inFlight } of inFlightShips) {
+    for (const { username, inFlight } of inFlightShips) {
       if (inFlight && now >= inFlight.arrivalTime) {
-        // >>> Get updated ship from DB
-        const fullShip = await starshipDB.get(user);
+        // >>> Get updated ship from centralized DB
+        const fullShip = await globalDB.getStarship(username);
         if (!fullShip) continue;
 
         // vvv Arrival State Update vvv
@@ -63,12 +65,12 @@ async function backgroundFlightChecker() {
         delete fullShip.inFlight;
 
         // vvv Persistence & Notification vvv
-        // >>> Save updated ship state
-        await starshipDB.save(user, fullShip);
+        // >>> Save updated ship state to centralized database
+        await globalDB.saveStarship(username, fullShip);
 
         // >>> Build notification message
         const message =
-          `@${user} ✅ Angekommen in ${inFlight.destination}! ` +
+          `@${username} ✅ Angekommen in ${inFlight.destination}! ` +
           `Distanz zurückgelegt: ${inFlight.distance.toFixed(
             2
           )} Lichtjahre | ` +
@@ -79,15 +81,12 @@ async function backgroundFlightChecker() {
         // >>> Send notification using globalBot if available
         if (globalBot) {
           console.log(
-            `Sending arrival notification to ${user} in ${inFlight.channel}`
+            `Sending arrival notification to ${username} in ${inFlight.channel}`
           );
           globalBot.say(inFlight.channel, message);
         }
       }
     }
-    // vvv Database Cleanup vvv
-    // >>> Close connection to prevent memory leaks
-    starshipDB.close();
   } catch (error) {
     console.error("Background flight check error:", error);
   }

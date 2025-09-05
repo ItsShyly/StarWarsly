@@ -1,13 +1,14 @@
-// ^^^ StarWarsly Command - Starship Adventure System ^^^
+// ^^^ StarWarsly Command  ^^^
 
 // >>> Main starship command that handles all space exploration functionality.
+// >>> Now integrated with the centralized GlobalDatabase system.
 // >>> Provides an immersive Star Wars experience with ship management, exploration,
 // >>> trading, combat, and interactive events across the galaxy.
 
 import type { BotCommandContext } from "../../types/index.js";
 import type { Starship } from "./types.js";
 import { BASE_SPEED } from "./constants.js";
-import { StarshipDatabase } from "./StarshipDatabase.js";
+import { GlobalDatabase } from "../../database/GlobalDatabase.js";
 import { ShipUtils } from "./utils.js";
 import { FlightCommands } from "./flightCommands.js";
 import { PlanetCommands } from "./planetCommands.js";
@@ -17,11 +18,11 @@ import { StatusCommands } from "./statusCommands.js";
 import { TransferCommands } from "./transferCommands.js";
 import { LeaderboardCommands } from "./leaderboardCommands.js";
 import { initializeBackgroundChecker } from "./backgroundChecker.js";
-import { InteractiveEventManager } from "./interactiveEvents.js";
+import { InteractiveEventManager } from "../../utils/interactiveEvents.js";
 
-// vvv Database Initialization vvv
-// >>> Create database instance for persistent ship storage
-const starshipDB = new StarshipDatabase();
+// vvv Centralized Database Access vvv
+// >>> Use the singleton GlobalDatabase instance
+const globalDB = GlobalDatabase.getInstance();
 
 export default {
   name: "starship",
@@ -41,8 +42,8 @@ export default {
       bot.say(channel, `${message}`, { replyTo: msg.id });
     };
 
-    // >>> Get ship from database
-    let ship: Starship | null = await starshipDB.get(userName);
+    // >>> Get ship from centralized database
+    let ship: Starship | null = await globalDB.getStarship(userName);
 
     if (!ship) {
       console.log(`Creating new starship for ${userName}`);
@@ -50,12 +51,15 @@ export default {
       const planetNames = ShipUtils.getPlanetNames();
       const startPlanet =
         planetNames[Math.floor(Math.random() * planetNames.length)];
+
+      // >>> Create ship with synchronized credits from global player data
+      const player = await globalDB.getPlayer(userName);
       ship = {
         name: `${displayName}'s Starship`,
         baseSpeed: BASE_SPEED,
         currentSpeed: BASE_SPEED,
         fuel: 100,
-        credits: 100,
+        credits: player.credits, // <<< Sync with global credits
         damage: 0,
         cargo: [],
         location: startPlanet,
@@ -65,7 +69,14 @@ export default {
         hasLanded: false,
         hasExploredThisLanding: false,
       };
-      await starshipDB.save(userName, ship);
+      await globalDB.saveStarship(userName, ship);
+    } else {
+      // >>> Sync ship credits with global player credits
+      const player = await globalDB.getPlayer(userName);
+      if (ship.credits !== player.credits) {
+        ship.credits = player.credits;
+        await globalDB.saveStarship(userName, ship);
+      }
     }
 
     // >>> Helper function to save ship state
@@ -73,15 +84,25 @@ export default {
       ShipUtils.updateShipSpeed(ship!);
       // >>> Ensure credits are always rounded before saving
       ship!.credits = Math.round(ship!.credits);
-      await starshipDB.save(userName, ship!);
+
+      // >>> Sync credits with global player data
+      const player = await globalDB.getPlayer(userName);
+      if (player.credits !== ship!.credits) {
+        await globalDB.updatePlayerCredits(
+          userName,
+          ship!.credits - player.credits
+        );
+      }
+
+      await globalDB.saveStarship(userName, ship!);
     };
 
     // >>> First, check for any completed flights
     await FlightCommands.checkFlightCompletion(ship, bot, displayName);
-    
+
     // >>> Update functional items effects
     const functionalUpdates = ShipUtils.updateFunctionalItems(ship);
-    functionalUpdates.messages.forEach(message => reply(message));
+    functionalUpdates.messages.forEach((message) => reply(message));
 
     // vvv Subcommand handling vvv
     // >>> Subcommand router
@@ -101,13 +122,19 @@ export default {
           await saveShip();
           break;
         case "fly":
-          await FlightCommands.flyToLocation(ship, args, reply, channel, displayName);
+          await FlightCommands.flyToLocation(
+            ship,
+            args,
+            reply,
+            channel,
+            displayName
+          );
           await saveShip();
           break;
         case "land":
           await PlanetCommands.landOnPlanet(ship, reply);
           if (ship.damage >= 100) {
-            await starshipDB.delete(userName);
+            await globalDB.deleteStarship(userName);
             return;
           }
           await saveShip();
@@ -124,9 +151,16 @@ export default {
           if (args.length > 0 && args[0].toLowerCase() === "help") {
             await PlanetCommands.showExplorationHelp(reply);
           } else {
-            await PlanetCommands.explore(ship, args, reply, userName, channel);
+            await PlanetCommands.explore(
+              ship,
+              args,
+              reply,
+              userName,
+              channel,
+              bot
+            );
             if (ship.damage >= 100) {
-              await starshipDB.delete(userName);
+              await globalDB.deleteStarship(userName);
               return;
             }
             await saveShip();
@@ -158,68 +192,128 @@ export default {
             if (isNaN(amount)) {
               reply("Invalid amount! Use numbers only.");
             } else {
-              await TransferCommands.transferCredits(ship, targetPlayer, amount, starshipDB, reply);
-              await saveShip();
+              // >>> Transfer credits between players
+              const success = await globalDB.transferCredits(
+                userName,
+                targetPlayer.toLowerCase(),
+                amount
+              );
+              if (success) {
+                // >>> Update ship credits to reflect transfer
+                ship.credits = await globalDB.getPlayerCredits(userName);
+                await saveShip();
+                reply(
+                  `💸 ${amount} Credits erfolgreich an ${targetPlayer} transferiert!`
+                );
+              } else {
+                reply(
+                  `❌ Transfer fehlgeschlagen! Nicht genügend Credits oder Spieler nicht gefunden.`
+                );
+              }
             }
           }
           break;
         case "help":
           await StatusCommands.showHelp(reply);
           break;
-        
+
         case "leaderboard":
         case "lb":
         case "ranking":
-          await LeaderboardCommands.showLeaderboard(starshipDB, reply);
+          // >>> Show top players by distance
+          const leaderboard = await globalDB.getStarshipLeaderboard(10);
+          const leaderboardText = leaderboard
+            .map(
+              (entry, index) =>
+                `${index + 1}. ${entry.name} (${
+                  entry.username
+                }) - ${entry.distance.toFixed(2)} ly`
+            )
+            .join(" | ");
+          reply(`🏆 Starship Leaderboard: ${leaderboardText}`);
           break;
-        
-        // >>> Interactive event commands
+
+        // >>> Interactive event commands - Commands/interactives/*
         case "shelter":
         case "run":
         case "hide":
-        case "bribe":
+        case "pay":
         case "fight":
         case "peace":
         case "buy":
         case "inspect":
         case "sneak":
         case "retreat":
-        case "shields":
-        case "weapons":
+        case "defend":
+        case "strike":
         case "mask":
         case "accept":
         case "decline":
-        case "climb":
+        case "fly":
           // >>> Handle interactive event commands
-          const interactiveResult = InteractiveEventManager.handleCommand(subcommand, userName, channel);
-          if (interactiveResult) {
-            // >>> Apply the result to the ship
-            if (interactiveResult.damage) ship.damage = Math.min(100, Math.max(0, ship.damage + interactiveResult.damage));
-            if (interactiveResult.credits) ship.credits = Math.round(ship.credits + interactiveResult.credits);
-            if (interactiveResult.addCargo) {
-              ShipUtils.addCargo(ship, interactiveResult.addCargo.item, interactiveResult.addCargo.quantity);
+          const interactiveOutcome = InteractiveEventManager.handleCommand(
+            subcommand,
+            userName,
+            channel
+          );
+
+          if (interactiveOutcome) {
+            const { result, investmentAmount, eventType } = interactiveOutcome;
+
+            // >>> Apply the result to the ship and global player data
+            if (result.damage) {
+              ship.damage = Math.min(
+                100,
+                Math.max(0, ship.damage + result.damage)
+              );
             }
-            if (interactiveResult.removeCargo && ship.cargo.length > 0) {
+            if (result.fuel) {
+              ship.fuel = Math.min(100, Math.max(0, ship.fuel + result.fuel));
+            }
+            if (result.credits) {
+              await globalDB.addCredits(userName, result.credits);
+              ship.credits = await globalDB.getPlayerCredits(userName);
+            }
+            if (result.addCargo) {
+              ShipUtils.addCargo(
+                ship,
+                result.addCargo.item,
+                result.addCargo.quantity
+              );
+            }
+            if (result.removeCargo && ship.cargo.length > 0) {
               const randomIndex = Math.floor(Math.random() * ship.cargo.length);
               const randomItem = ship.cargo[randomIndex].item;
               const removed = ShipUtils.removeCargo(ship, randomItem, 1);
               if (removed) reply(`❗ 1x ${randomItem} verloren!`);
             }
-            
+
             // >>> Check for ship destruction
             if (ship.damage >= 100) {
-              await starshipDB.delete(userName);
-              reply(`💥 Dein Schiff wurde zerstört! Game over. Ein neues Schiff wird beim nächsten Mal erstellt.`);
+              await globalDB.deleteStarship(userName);
+              reply(
+                `💥 Dein Schiff wurde zerstört! Game over. Ein neues Schiff wird beim nächsten Mal erstellt.`
+              );
               return;
             }
-            
+
             await saveShip();
-            reply(`${interactiveResult.emoji} ${interactiveResult.text}`);
+
+            // >>> Provide feedback including investment info if relevant
+            let feedback = `${result.emoji} ${result.text}`;
+            if (investmentAmount && investmentAmount > 0) {
+              feedback += ` (Einsatz: ${investmentAmount} Credits, Ergebnis: ${eventType})`;
+            }
+
+            reply(feedback);
           } else {
-            reply(`Unknown subcommand! Use #starship help for commands`);
+            reply(
+              `❗ Keine zeitkritischen Events aktiv. Diese Kommandos funktionieren nur während Erkundungs-Events!`
+            );
           }
+
           break;
-          
+
         default:
           reply(`Unknown subcommand! Use #starship help for commands`);
           break;
