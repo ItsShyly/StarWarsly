@@ -189,38 +189,53 @@ async function acquireToken(): Promise<void> {
 // >>> Command registry for all bot commands
 const commands: Record<string, BotCommand> = {};
 
-// >>> Load all commands from /commands folder
+// ^^^ RECURSIVE COMMAND LOADING ^^^
+// >>> Load all commands from /commands folder and subdirectories
 async function loadCommandFiles(): Promise<void> {
-    // >>> Path to compiled commands
     const commandsPath = path.join(__dirname, 'commands');
     
     if (!fs.existsSync(commandsPath)) {
         throw new Error(`Commands directory not found: ${commandsPath}`);
     }
     
-    const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-    
-    console.log(`Found ${commandFiles.length} command files in ${commandsPath}`);
-    
-    for (const file of commandFiles) {
-        try {
-            const filePath = path.join(commandsPath, file);
-            console.log(`Importing command: ${filePath}`);
+    // >>> Recursive function to load commands from directories
+    async function loadFromDirectory(dirPath: string): Promise<void> {
+        const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+        
+        for (const entry of entries) {
+            const fullPath = path.join(dirPath, entry.name);
             
-            // >>> Use 'file://' prefix for Windows compatibility
-            const commandModule = await import(`file://${filePath.replace(/\\/g, '/')}`);
-            const command = commandModule.default as BotCommand;
-            
-            if (command && command.name) {
-                commands[command.name] = command;
-                console.log(`✅ Loaded command: ${command.name}`);
-            } else {
-                console.error(`❌ Invalid command structure in ${file}`);
+            if (entry.isDirectory()) {
+                // >>> Recursively load from subdirectories
+                console.log(`📁 Scanning subdirectory: ${entry.name}`);
+                await loadFromDirectory(fullPath);
+            } else if (entry.isFile() && entry.name.endsWith('.js')) {
+                // >>> Load command file
+                try {
+                    console.log(`📝 Loading command: ${fullPath}`);
+                    
+                    // >>> Use 'file://' prefix for Windows compatibility
+                    const commandModule = await import(`file://${fullPath.replace(/\\/g, '/')}`);
+                    const command = commandModule.default as BotCommand;
+                    
+                    if (command && command.name && command.execute && typeof command.execute === 'function') {
+                        commands[command.name] = command;
+                        console.log(`✅ Loaded command: ${command.name} (from ${entry.name})`);
+                    } else {
+                        console.log(`⚠️ Skipping non-command file: ${entry.name}`);
+                    }
+                } catch (error) {
+                    console.error(`🔥 Error loading command ${fullPath}:`, error);
+                }
             }
-        } catch (error) {
-            console.error(`🔥 Error loading command ${file}:`, error);
         }
     }
+    
+    console.log(`🔍 Starting recursive command loading from: ${commandsPath}`);
+    await loadFromDirectory(commandsPath);
+    
+    console.log(`🎯 Total commands loaded: ${Object.keys(commands).length}`);
+    console.log(`📋 Available commands: ${Object.keys(commands).join(', ')}`);
 }
 
 // vvv Text Processing Functions vvv
@@ -342,9 +357,9 @@ async function initBot(): Promise<ExtendedBot> {
 
     // >>> Connection events
     bot.onConnect(() => {
-        console.log(`Connected! Joined channels: ${bot.channels.join(', ')}`);
-        console.log(`Listening for commands: ${Object.keys(commands).join(', ')}`);
-        bot.say(OWN_CHANNEL, "Der Bot ist wieder online! Möge die Macht mit uns sein!");
+        console.log(`1: Connected! Joined channels: ${bot.channels.join(', ')}`);
+        console.log(`2: Listening for commands: ${Object.keys(commands).join(', ')}`);
+        bot.say(OWN_CHANNEL, "Der Bot ist wieder online oder so..");
     });
     
     // >>> Periodic token validation (every 3 Hours)
