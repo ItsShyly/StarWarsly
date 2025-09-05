@@ -4,7 +4,6 @@
 // >>> Defines economic values, probabilities, and gameplay mechanics.
 // >>> Central configuration for the entire starship adventure system.
 
-import strike from "@commands/interactives/strike.js";
 import type { CargoType, GameEvent, TieredExplorationEvent, InteractiveEvent, InteractiveEventResult } from "./types.js";
 
 
