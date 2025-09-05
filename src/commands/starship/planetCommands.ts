@@ -61,12 +61,11 @@ export class PlanetCommands {
     // >>> Parse investment amount
     if (args.length === 0) {
       throw new Error(
-        "Du musst einen Investitionsbetrag angeben! Beispiel: `#starship explore 150`\n" +
-        "**Investitionsebenen:**\n" +
-        `• ${ExplorationUtils.getTierDescription(1)}\n` +
-        `• ${ExplorationUtils.getTierDescription(2)}\n` +
-        `• ${ExplorationUtils.getTierDescription(3)}\n` +
-        `• ${ExplorationUtils.getTierDescription(4)}`
+        "Du musst einen Investitionsbetrag angeben! Beispiel: `#starship explore 150` |" +
+        ` | ${ExplorationUtils.getTierDescription(1)}` +
+        ` | ${ExplorationUtils.getTierDescription(2)}` +
+        ` | ${ExplorationUtils.getTierDescription(3)}` +
+        ` | ${ExplorationUtils.getTierDescription(4)}`
       );
     }
 
@@ -131,12 +130,12 @@ export class PlanetCommands {
   // >>> Show exploration help and tier information
   static async showExplorationHelp(reply: (msg: string) => void): Promise<void> {
     const helpMessage = `
-🚀 Starship Erkundungssystem - #starship explore <betrag> | 
+#starship Erkundungssystem [#starship explore <betrag>] 🚀 | 
 ${ExplorationUtils.getTierDescription(1)} = ${ExplorationUtils.getTierName(1)} | 
 ${ExplorationUtils.getTierDescription(2)} = ${ExplorationUtils.getTierName(2)} | 
 ${ExplorationUtils.getTierDescription(3)} = ${ExplorationUtils.getTierName(3)} | 
 ${ExplorationUtils.getTierDescription(4)} = ${ExplorationUtils.getTierName(4)} | 
-🔍 Höhere Investitionen = bessere Chancen für seltene Events | Mehrere Events sind SEHR selten (max 2 Events) | Wertvolle Fracht = keine Extra-Credits!`;
+Also: Mehr Credits = Höhere Chancen aber auch höhere Risiken!`;
     reply(helpMessage.trim());
   }
 }

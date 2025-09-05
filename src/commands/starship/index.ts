@@ -214,7 +214,7 @@ export default {
           }
           break;
         case "help":
-          await StatusCommands.showHelp(reply);
+          await StatusCommands.showHelp(bot, channel, reply);
           break;
 
         case "leaderboard":

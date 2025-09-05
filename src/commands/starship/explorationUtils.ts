@@ -23,10 +23,10 @@ export class ExplorationUtils {
 // >>> Get tier description for help text
   static getTierDescription(tier: number): string {
     const descriptions = {
-      1: "1-100 credits (Bessere Seltene-Event-Chancen)",
-      2: "101-500 credits (Epische Events + sehr seltene 2. Event-Chance)", 
-      3: "501-1500 credits (Epische Events + seltene 2. Event-Chance)",
-      4: "1501+ credits (Legendäre Events + minimale 2. Event-Chance)"
+      1: "1-100 credits (Low Risk Common Events)",
+      2: "101-500 credits (Low Risk Rare Events)", 
+      3: "501-1500 credits (Mid Risk Epic Events)",
+      4: "1501+ credits (High Risk Legendary Events)"
     };
     return descriptions[tier as keyof typeof descriptions] || "Unbekannt";
   }

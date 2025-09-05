@@ -6,7 +6,10 @@ import { ShipUtils } from "./utils.js";
 
 export class StatusCommands {
   // >>> Display comprehensive ship status information
-  static async showStatus(ship: Starship, reply: (msg: string) => void): Promise<void> {
+  static async showStatus(
+    ship: Starship,
+    reply: (msg: string) => void
+  ): Promise<void> {
     ShipUtils.updateShipSpeed(ship); // <<< Ensure current speed is calculated
 
     let statusMsg = [
@@ -14,7 +17,9 @@ export class StatusCommands {
       `⚡ ${ship.currentSpeed.toFixed(1)} ly/h | 🔋 ${ship.fuel}%`, // <<< Speed formatted to 1 decimal
       `💰 ${ship.credits} cr | 🔧 ${ship.damage}% dmg`,
       `📦 ${ShipUtils.calculateCargoWeight(ship)} kg | 🌍 ${ship.location}`,
-      `🛣️ ${ship.distance.toLocaleString('de-DE', { maximumFractionDigits: 2 })} Lichtjahre zurückgelegt`, // <<< German number formatting
+      `🛣️ ${ship.distance.toLocaleString("de-DE", {
+        maximumFractionDigits: 2,
+      })} Lichtjahre zurückgelegt`, // <<< German number formatting
     ];
 
     if (ship.inFlight) {
@@ -23,8 +28,7 @@ export class StatusCommands {
         (ship.inFlight.arrivalTime - Date.now()) / 1000
       );
       const originalTime =
-        (ship.inFlight.baseArrivalTime - ship.inFlight.departureTime) /
-        1000;
+        (ship.inFlight.baseArrivalTime - ship.inFlight.departureTime) / 1000;
       const timeSaved = originalTime - remainingSeconds; // <<< Calculate time saved from hyperspace
 
       statusMsg.push(
@@ -45,25 +49,34 @@ export class StatusCommands {
 
   // vvv Help Information Commands vvv
   // >>> Display available commands and their usage
-  static async showHelp(reply: (msg: string) => void): Promise<void> {
-    const helpMessage = [
+  static async showHelp(
+    bot: any,
+    channel: string,
+    reply: (msg: string) => void
+  ): Promise<void> {
+    const helpLines = [
       "🚀 #starship Kommandokonsole:",
-      "help → Diese Info",
-      "name <neuer_Name> → Namechange",
-      "fly <Planet|Optional> → Fliegen",
-      "land → Landen",
-      "explore <betrag> → Erkunden (investitionsbasiert)",
-      "cargo → Frachtinfo",
-      "sell <Item> → Verkaufen",
-      "jettison <Item> [Anzahl] → Abwerfen",
-      "refuel [%] →  Tanken (-5cr/1%)",
-      "repair [%] → Reparatur (-10cr/1%)",
-      "hyperspace → Speed Boost (-1000cr)",
-      "transfer/give <player> <amount> → Credits übertragen",
-      "leaderboard/lb → Bestenliste anzeigen",
-      "explore help → Erkundungsdetails"
-    ].join(" | ");
+      "#starship help → Diese Info",
+      "#starship name <neuer_Name> → Namechange",
+      "#starship fly <Planet|Optional> → Fliegen",
+      "#starship land → Landen",
+      "#starship explore <betrag> → Erkunden (investitionsbasiert)",
+      "#starship cargo → Frachtinfo",
+      "#starship sell <Item> → Verkaufen",
+      "#starship jettison <Item> [Anzahl] → Abwerfen",
+      "#starship refuel [%] →  Tanken (-5cr/1%)",
+      "#starship repair [%] → Reparatur (-10cr/1%)",
+      "#starship hyperspace → Speed Boost (-1000cr)",
+      "#starship transfer/give <player> <amount> → Credits übertragen",
+      "#starship leaderboard/lb → Bestenliste anzeigen",
+      "#starship explore help → Erkundungsdetails",
+    ];
 
-    reply(helpMessage);
+    reply("halbeBibel Incoming...");
+
+    // say each line separately
+    for (const line of helpLines) {
+      await bot.say(channel, line);
+    }
   }
 }
