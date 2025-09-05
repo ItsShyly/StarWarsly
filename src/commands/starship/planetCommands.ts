@@ -8,7 +8,8 @@ import type { Starship, InteractiveEventResult } from "./types.js";
 import { LANDING_EVENTS } from "./constants.js";
 import { ShipUtils } from "./utils.js";
 import { ExplorationUtils } from "./explorationUtils.js";
-import { InteractiveEventManager } from "./interactiveEvents.js";
+import { InteractiveEventManager } from "../../utils/interactiveEvents.js";
+import { GlobalInteractiveHandler } from "../../utils/globalInteractiveHandler.js";
 
 // vvv Planet Interaction Commands vvv
 export class PlanetCommands {
@@ -42,7 +43,7 @@ export class PlanetCommands {
   }
 
   // ^^^ Planetary Exploration System ^^^
-  static async explore(ship: Starship, args: string[], reply: (msg: string) => void, userId?: string, channelId?: string): Promise<void> {
+  static async explore(ship: Starship, args: string[], reply: (msg: string) => void, userId?: string, channelId?: string, bot?: any): Promise<void> {
     // vvv Exploration Prerequisites vvv
     // >>> Validate exploration conditions
     if (ship.inFlight)
@@ -111,16 +112,19 @@ export class PlanetCommands {
     // vvv Interactive Event Handling vvv
     // >>> Check for interactive event (only on first result)
     const firstResult = results[0];
-    if ((firstResult as any).interactiveEvent && userId && channelId) {
-      // >>> Start the interactive event
-      InteractiveEventManager.startEvent(
+    if ((firstResult as any).interactiveEvent && userId && channelId && bot) {
+      // >>> Use timeout notification system with investment amount for scaling
+      GlobalInteractiveHandler.createInteractiveEvent(
         (firstResult as any).interactiveEvent, 
         userId, 
-        channelId
+        channelId,
+        bot,
+        investmentAmount
       );
       
-      // >>> Send interactive event message
-      reply(`\n${(firstResult as any).interactiveEvent.emoji} ${(firstResult as any).interactiveEvent.text}`);
+      // >>> Send interactive event message with timer
+      const event = (firstResult as any).interactiveEvent;
+      reply(`\n${event.emoji} ${event.text}`);
     }
   }
   // ^^^ Exploration Help Display ^^^

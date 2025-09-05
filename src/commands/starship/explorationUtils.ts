@@ -235,7 +235,7 @@ static formatExplorationResult(result: ExplorationResult): string {
   }
 // >>> Check if an interactive event should trigger (15% chance)
   static shouldTriggerInteractiveEvent(): boolean {
-    return Math.random() < 0.15; // >>> 15% chance
+    return Math.random() < 0.15; // <<< 15% chance
   }
 // >>> Get a random interactive event
   static getRandomInteractiveEvent(): InteractiveEvent {
